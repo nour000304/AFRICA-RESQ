@@ -1,0 +1,22 @@
+{
+  "fire": {
+    "detected": false,
+    "confidence": 0.0
+  },
+  "smoke": {
+    "detected": false,
+    "confidence": 0.0
+  },
+  "survivor": {
+    "detected": false,
+    "confidence": 0,
+    "location": null
+  },
+  "risk": {
+    "score": 0,
+    "level": "LOW"
+  },
+  "priority": null,
+  "route": [],
+  "recommendation": null
+}
