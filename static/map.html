@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>AFRICA RESQ - Safe Route Engine</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <style>
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        .panel {
+
+            position: absolute;
+
+            top: 20px;
+            left: 20px;
+
+            z-index: 1000;
+
+            background: white;
+
+            padding: 18px;
+
+            border-radius: 12px;
+
+            box-shadow: 0 3px 15px rgba(0,0,0,0.25);
+
+            width: 300px;
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            margin-bottom: 5px;
+        }
+
+        .panel p {
+            margin-top: 5px;
+        }
+
+        input {
+
+            width: 100%;
+
+            padding: 9px;
+
+            margin-bottom: 8px;
+
+            box-sizing: border-box;
+
+            border: 1px solid #ccc;
+
+            border-radius: 5px;
+        }
+
+        button {
+
+            width: 100%;
+
+            padding: 10px;
+
+            border: none;
+
+            border-radius: 6px;
+
+            cursor: pointer;
+
+            background: #222;
+
+            color: white;
+
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #444;
+        }
+
+        #result {
+
+            margin-top: 12px;
+
+            font-size: 14px;
+
+            line-height: 1.5;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+<div class="panel">
+
+    <h2>AFRICA RESQ</h2>
+
+    <p><b>Safe Route Engine</b></p>
+
+    <label>Start Latitude</label>
+
+    <input
+        id="startLat"
+        type="number"
+        step="any"
+        value="31.6343"
+    >
+
+    <label>Start Longitude</label>
+
+    <input
+        id="startLon"
+        type="number"
+        step="any"
+        value="-7.9999"
+    >
+
+    <label>Destination Latitude</label>
+
+    <input
+        id="endLat"
+        type="number"
+        step="any"
+        value="31.6295"
+    >
+
+    <label>Destination Longitude</label>
+
+    <input
+        id="endLon"
+        type="number"
+        step="any"
+        value="-7.9818"
+    >
+
+    <button onclick="calculateRoute()">
+        Calculate Route
+    </button>
+
+    <div id="result">
+        Enter locations and calculate a route.
+    </div>
+
+</div>
+
+
+<div id="map"></div>
+
+
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+</script>
+
+
+<script>
+
+const defaultLat = 31.6343;
+const defaultLon = -7.9999;
+
+
+/*
+    Create map
+*/
+
+const map = L.map("map").setView(
+    [defaultLat, defaultLon],
+    13
+);
+
+
+/*
+    OpenStreetMap tiles
+*/
+
+L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+    }
+).addTo(map);
+
+
+/*
+    Markers and route
+*/
+
+let startMarker = null;
+let endMarker = null;
+let routeLine = null;
+
+
+/*
+    Calculate route
+*/
+
+async function calculateRoute() {
+
+    const startLat = parseFloat(
+        document.getElementById("startLat").value
+    );
+
+    const startLon = parseFloat(
+        document.getElementById("startLon").value
+    );
+
+    const endLat = parseFloat(
+        document.getElementById("endLat").value
+    );
+
+    const endLon = parseFloat(
+        document.getElementById("endLon").value
+    );
+
+
+    /*
+        Validate coordinates
+    */
+
+    if (
+        isNaN(startLat) ||
+        isNaN(startLon) ||
+        isNaN(endLat) ||
+        isNaN(endLon)
+    ) {
+
+        alert("Please enter valid coordinates.");
+
+        return;
+    }
+
+
+    const result = document.getElementById("result");
+
+    result.innerHTML = "Calculating route...";
+
+
+    try {
+
+        /*
+            Remove old markers
+        */
+
+        if (startMarker) {
+            map.removeLayer(startMarker);
+        }
+
+        if (endMarker) {
+            map.removeLayer(endMarker);
+        }
+
+        if (routeLine) {
+            map.removeLayer(routeLine);
+        }
+
+
+        /*
+            Call AFRICA RESQ API
+        */
+
+        const response = await fetch(
+            `/api/route?start_lat=${startLat}` +
+            `&start_lon=${startLon}` +
+            `&end_lat=${endLat}` +
+            `&end_lon=${endLon}`
+        );
+
+
+        /*
+            Check HTTP response
+        */
+
+        if (!response.ok) {
+
+            throw new Error(
+                "API request failed: " + response.status
+            );
+
+        }
+
+
+        const data = await response.json();
+
+
+        /*
+            Check route result
+        */
+
+        if (!data.success) {
+
+            result.innerHTML =
+                "<b>No safe route found.</b>";
+
+            return;
+        }
+
+
+        /*
+            Start marker
+        */
+
+        startMarker = L.marker(
+            [startLat, startLon]
+        )
+        .addTo(map)
+        .bindPopup(
+            "Start"
+        );
+
+
+        /*
+            Destination marker
+        */
+
+        endMarker = L.marker(
+            [endLat, endLon]
+        )
+        .addTo(map)
+        .bindPopup(
+            "Destination"
+        );
+
+
+        /*
+            Draw GeoJSON route
+        */
+
+        routeLine = L.geoJSON(
+            data.geometry,
+            {
+                weight: 6
+            }
+        ).addTo(map);
+
+
+        /*
+            Zoom map to route
+        */
+
+        map.fitBounds(
+            routeLine.getBounds(),
+            {
+                padding: [50, 50]
+            }
+        );
+
+
+        /*
+            Display route information
+        */
+
+        result.innerHTML =
+            "<b>Route found</b><br><br>" +
+
+            "Distance: " +
+            data.distance_km +
+            " km<br>" +
+
+            "Duration: " +
+            data.duration_minutes +
+            " minutes";
+
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        result.innerHTML =
+            "<b>Connection error</b><br><br>" +
+            error.message;
+
+    }
+
+}
+
+</script>
+
+
+</body>
+
+</html>

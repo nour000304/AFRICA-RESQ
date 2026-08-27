@@ -1,8 +1,15 @@
 import json
 import os
 
+# Project root
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
 STATE_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
+    BASE_DIR,
     "state.json"
 )
 
@@ -10,15 +17,15 @@ STATE_FILE = os.path.join(
 state = {
     "fire": {
         "detected": False,
-        "confidence": 0
+        "confidence": 0.0
     },
     "smoke": {
         "detected": False,
-        "confidence": 0
+        "confidence": 0.0
     },
     "survivor": {
         "detected": False,
-        "confidence": 0,
+        "confidence": 0.0,
         "location": None
     },
     "risk": {
@@ -33,8 +40,13 @@ state = {
 
 def save_state():
 
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
 
-    print("STATE SAVED:", STATE_FILE)
-    print("FIRE STATE:", state["fire"])
+        print("STATE SAVED:", STATE_FILE)
+        print("FIRE STATE:", state["fire"])
+        print("SMOKE STATE:", state["smoke"])
+
+    except Exception as e:
+        print("ERROR SAVING STATE:", e)Get-ChildItem
