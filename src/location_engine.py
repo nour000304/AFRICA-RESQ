@@ -1,15 +1,20 @@
 class LocationEngine:
 
     def __init__(self):
-        self.country = "Morocco"
+        self.country = "Egypt"
+
+        # Approximate Egypt boundaries
+        self.min_lat = 22.0
+        self.max_lat = 31.7
+        self.min_lon = 24.7
+        self.max_lon = 37.0
 
     def validate_location(self, latitude, longitude):
 
-        # Approximate Morocco boundaries
-        if not (27.0 <= latitude <= 36.0):
+        if not (self.min_lat <= latitude <= self.max_lat):
             return False
 
-        if not (-13.5 <= longitude <= -1.0):
+        if not (self.min_lon <= longitude <= self.max_lon):
             return False
 
         return True
@@ -21,12 +26,13 @@ class LocationEngine:
                 "valid": False,
                 "country": None,
                 "latitude": latitude,
-                "longitude": longitude
+                "longitude": longitude,
+                "message": "Location is outside the supported region"
             }
 
         return {
             "valid": True,
-            "country": "Morocco",
+            "country": "Egypt",
             "latitude": latitude,
             "longitude": longitude
         }

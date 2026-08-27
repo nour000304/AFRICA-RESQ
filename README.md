@@ -1,274 +1,291 @@
-# AFRICA RESQ — AI Fire & Smoke Detection System
+# AFRICA RESQ — AI Fire & Smoke Detection System (Egypt)
 
 ## Overview
 
-AFRICA RESQ is an AI-powered fire and smoke detection system designed to support emergency response and search-and-rescue operations.
+AFRICA RESQ is an AI-powered fire and smoke detection system designed to support
+emergency response and search-and-rescue operations in **Egypt**.
 
-The system combines computer vision, hazard analysis, risk assessment, survivor detection, and decision-support components.
+The system combines computer vision, hazard analysis, risk assessment, survivor
+detection, **nearest emergency-shelter search** and decision-support components,
+all exposed through a FastAPI backend that feeds a real-time **dashboard**.
+
+## What's inside (hackathon prototype)
+
+| Feature | Description |
+|---|---|
+| 🏠 Nearest shelter search | Real shelter dataset for **13 Egyptian cities** (Cairo, Giza, Alexandria, Port Said, Ismailia, Suez, Luxor, Aswan, Sharm El-Sheikh, Hurghada, Mansoura, Tanta, New Admin Capital). Distances (haversine), direction, walk/drive estimates, city filter. |
+| 📡 Fake sensor simulator | Continuous simulated telemetry (temperature, gas, smoke density, humidity, wind, battery, GPS, fire/smoke/survivor detections, risk, priority, recommendation). Runs automatically so dashboards always have live data. |
+| 🔌 API contract for the dashboard | The backend exposes every endpoint the frontend dashboard team needs (`/api/nearest_shelter`, `/api/sensor`, `/api/full`, `/api/route`, ...). The frontend dashboard itself is built by the frontend teammate — a basic reference page is served at `/map`. |
+| 🗄️ Data engineering | Every detection — from the camera (YOLO) **and** the fake sensor simulator — is automatically persisted to a SQLite store (`data/africa_resq.db`) plus an append-only JSONL export (`data/events.jsonl`), queryable via `/api/events*`. |
+| 🚁 Perception (optional) | YOLO fire/smoke detection pipeline (`src/perception.py`, `live_pipeline.py`, `webcam.py`) for real camera input. |
 
 ## System Architecture
 
 ```text
 Camera / Sensors
        ↓
-Perception
+Perception (optional YOLO)
        ↓
-Fusion
-       ↓
-Hazard & Survivor Analysis
+Fusion / Hazard / Survivor Analysis
        ↓
 Risk / Priority / Safe Path
        ↓
-Recommendation
+FastAPI Backend  ←——  Fake Sensor Simulator (prototype)
        ↓
-FastAPI Backend
-       ↓
-Frontend Dashboard
+Frontend Dashboard (static/map.html)
 ```
 
-## Main Components
+## Quick Start (backend + dashboard)
 
-- `perception.py` — Fire and smoke detection using computer vision
-- `webcam.py` — Live camera input
-- `fusion.py` — Combines system information
-- `hazard_engine.py` — Hazard analysis
-- `survivor.py` — Survivor detection
-- `thermal.py` — Thermal sensor processing
-- `risk_engine.py` — Risk assessment
-- `priority_engine.py` — Rescue priority assessment
-- `safe_path.py` — Safe route processing
-- `zone_mapper.py` — Zone mapping
-- `recommendation_engine.py` — Generates recommendations
-- `main_pipeline.py` — Main processing pipeline
-- `live_pipeline.py` — Live processing pipeline
-- `shared_state.py` — Shared system state
-- `sensor_data.py` — Sensor data handling
-- `api.py` — FastAPI backend
+```powershell
+# 1. Create a virtual environment (Python 3.10+)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 
-## AI Perception
+# 2. Install dependencies
+pip install -r requirements-api.txt
 
-The perception layer uses a trained YOLO-based computer vision model to detect fire and smoke from camera frames.
+# 3. Start the server
+python run_api.py
+```
 
-For each detection, the system can process information such as:
+Then open:
 
-- Detection class
-- Confidence score
-- Bounding box
-- Object location
-- Detection source
-- Timestamp
+- **API docs:**  http://localhost:8000/docs
+- **Health:**    http://localhost:8000/api/health
+- **Reference page:** http://localhost:8000/map (basic page — the real dashboard
+  is built by the frontend teammate)
+
+> The fake sensor simulator starts automatically with the server. `state.json`
+> at the project root is continuously updated with live telemetry.
+
+## Data Engineering
+
+Every time the system **detects something**, the event is persisted automatically:
+
+- **Camera / YOLO pipeline** (`src/perception.py`) → logs `fire`, `smoke`,
+  `survivor`, `person` detections with confidence + bounding box (throttled to
+  ~1 row per class every 2s so a constant fire doesn't flood the store).
+- **Fake sensor simulator** (`src/simulator.py`) → logs a `telemetry` record
+  every tick plus one record per active detection.
+
+Storage is dual-purpose and requires **no extra dependencies** (stdlib only):
+
+```
+data/africa_resq.db    # SQLite - queryable, indexed (type, ts, source)
+data/events.jsonl      # append-only JSON lines - ready for ETL / pipelines
+```
+
+Schema of each event row:
+
+```json
+{
+  "id": 1,
+  "event_type": "fire",
+  "source": "camera_yolo",
+  "detected": true,
+  "confidence": 0.92,
+  "latitude": 30.0444,
+  "longitude": 31.2357,
+  "payload": {"zone": "B3", "bbox": [1, 2, 3, 4]},
+  "ts": 1760000000.0,
+  "ts_iso": "2026-08-28T10:00:00"
+}
+```
+
+Example:
+
+```http
+GET /api/events/stats
+GET /api/events?type=fire&start=2026-08-28&limit=100
+POST /api/events   # ingest from external systems
+```
+
+You can enable/disable event throttling with the `DATA_THROTTLE` env var
+(seconds between identical events, default `2.0`; set `0` to record everything).
+
+### Connecting the dashboard (frontend teammate)
+
+The backend exposes everything the dashboard needs over HTTP + Server-Sent
+Events — **no polling required** for live data:
+
+```http
+GET /api/events/latest     # last events + latest snapshot + counts
+GET /api/events/stats      # aggregated counts (by type / source / detected)
+GET /api/events/:type,source,start,end,limit,offset   # query history
+GET /api/events/export     # dump every stored event
+GET /api/events/stream     # LIVE feed (SSE) - pushed detections + state
+GET /api/sensor            # latest fake sensor snapshot
+GET /api/full              # complete current system state
+POST /api/events           # ingest external detections
+```
+
+Live feed example (browser):
+
+```javascript
+const stream = new EventSource('http://localhost:8000/api/events/stream');
+
+stream.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    // msg.kind === 'hello'  -> connection greeting + stats
+    // msg.kind === 'event'  -> freshly stored detection/telemetry row
+    // msg.kind === 'state'  -> latest full sensor snapshot
+    if (msg.kind === 'event' && msg.event_type === 'fire') {
+        drawFireMarker(msg.latitude, msg.longitude, msg.confidence);
+    }
+};
+```
+
+The event rows use the schema shown above (`event_type`, `source`, `detected`,
+`confidence`, `latitude`, `longitude`, `payload`, `ts_iso`), so the dashboard
+can plot markers, timeline charts and risk stats directly from them.
+
+Also create events from the frontend when a camera pipeline is unavailable:
+
+```http
+POST /api/events
+Content-Type: application/json
+
+{ "type": "fire", "source": "dashboard", "detected": true,
+  "confidence": 0.9, "latitude": 30.0477, "longitude": 31.2336,
+  "payload": {"zone": "A1"} }
+```
+
+### One-click start (Windows)
+
+Double-click `start_backend.bat`.
+
+### To use real camera detection instead
+
+```powershell
+pip install -r requirements.txt
+cd src
+python live_pipeline.py      # or python webcam.py
+```
 
 ## API Endpoints
 
-The backend is built with FastAPI and provides the following REST API endpoints:
-
 | Endpoint | Purpose |
 |---|---|
-| `GET /` | Check whether the AFRICA RESQ AI system is online |
-| `GET /api/status` | Return backend status and timestamp |
-| `GET /api/detection` | Return fire, smoke and survivor detection |
-| `GET /api/risk` | Return the current risk assessment |
-| `GET /api/full` | Return the complete system state |
+| `GET /` | System info + available endpoints |
+| `GET /api/status` | Backend status + timestamp |
+| `GET /api/health` | Health check (incl. simulator state) |
+| `GET /api/full` | Complete system state (detections, risk, sensors, history) |
+| `GET /api/detection` | Fire / smoke / survivor detections |
+| `GET /api/risk` | Current risk score + level |
+| `GET /api/priority` | Rescue priority |
+| `GET /api/location?latitude&longitude` | Validate a position is inside Egypt |
+| `GET /api/route?start_lat&start_lon&end_lat&end_lon` | Driving route (OSRM, with straight-line fallback) |
+| `GET /api/shelters?city=` | List shelters (all, or one city) |
+| `GET /api/shelters/cities` | List cities that have shelters |
+| `GET /api/nearest_shelter?latitude&longitude&limit=` | Nearest shelters, sorted by distance |
+| `GET /api/shelter/{shelter_id}` | Shelter details by id |
+| `GET /api/sensor` | Latest fake sensor snapshot |
+| `GET /api/sensor/history?limit=` | Recent sensor history |
+| `POST /api/events` | Ingest a detection event (body: type, source, detected, confidence, latitude, longitude, payload) — used by camera pipeline / external systems |
+| `GET /api/events?type&source&start&end&limit&offset` | Query stored events |
+| `GET /api/events/latest` | Latest events + current snapshot + counts |
+| `GET /api/events/stats` | Aggregated stats (counts by type / source / detected) |
+| `GET /api/events/export` | Export every stored event as JSON |
+| `GET /api/events/stream` | Live feed (SSE) — pushes new events + state, no polling |
+| `POST /api/simulation/start` | Start the fake sensor simulator |
+| `POST /api/simulation/stop` | Stop the fake sensor simulator |
+| `GET /api/simulation/status` | Simulator state |
+| `POST /api/incident?latitude&longitude` | Recenter the simulation on an incident |
+| `GET /map` | Dashboard page |
+| `GET /static/...` | Static assets |
 
-## API Examples
+## Example — nearest shelter
 
-### GET `/`
-
-Returns the current system status.
-
-Example response:
+```http
+GET /api/nearest_shelter?latitude=30.0477&longitude=31.2336&limit=3
+```
 
 ```json
 {
-  "status": "online",
-  "system": "AFRICA RESQ AI"
+  "success": true,
+  "latitude": 30.0477,
+  "longitude": 31.2336,
+  "nearest": [
+    {
+      "shelter": {
+        "id": "CAI-03",
+        "name": "Tahrir Square (Egyptian Museum)",
+        "city": "Cairo",
+        "type": "open_square",
+        ...
+      },
+      "distance_km": 0.31,
+      "direction": "SE",
+      "estimated_walk_minutes": 4,
+      "estimated_drive_minutes": 1
+    }
+  ]
 }
 ```
-
-### GET `/api/status`
-
-Returns the backend status and current timestamp.
-
-Example response:
-
-```json
-{
-  "status": "online",
-  "timestamp": "2026-08-25T13:30:00"
-}
-```
-
-### GET `/api/detection`
-
-Returns current fire, smoke and survivor detection information.
-
-Example response:
-
-```json
-{
-  "fire": {
-    "detected": true,
-    "confidence": 0.85
-  },
-  "smoke": {
-    "detected": false,
-    "confidence": 0
-  },
-  "survivor": {
-    "detected": false,
-    "confidence": 0,
-    "location": null
-  }
-}
-```
-
-### GET `/api/risk`
-
-Returns the current risk assessment.
-
-Example response:
-
-```json
-{
-  "score": 75,
-  "level": "HIGH"
-}
-```
-
-### GET `/api/full`
-
-Returns the complete current system state, including:
-
-- Fire detection
-- Smoke detection
-- Survivor detection
-- Risk information
-- Priority
-- Route
-- Recommendation
-
-## State Management
-
-The current system state is stored in:
-
-```text
-state.json
-```
-
-The FastAPI backend reads this state and provides the relevant information to the frontend.
-
-## Running the Backend
-
-First activate the Python virtual environment.
-
-From the project directory:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Then move to the `src` directory:
-
-```powershell
-cd src
-```
-
-Start the FastAPI backend:
-
-```powershell
-python -m uvicorn api:app --reload
-```
-
-The API will be available at:
-
-```text
-http://127.0.0.1:8000
-```
-
-## Interactive API Documentation
-
-FastAPI automatically provides interactive API documentation.
-
-Open:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-The documentation allows the frontend team to test the available API endpoints.
 
 ## Project Structure
 
 ```text
-fire-smoke-detection/
-│
-├── model/
-│   └── best.pt
-│
+AFRICA-RESQ/
+├── run_api.py              # server launcher
+├── start_backend.bat       # one-click Windows start
+├── requirements-api.txt    # lightweight backend deps (deploy)
+├── requirements.txt        # full pipeline deps (perception)
+├── state.json              # live system state (updated by simulator)
+├── pytest.ini
+├── conftest.py             # makes `src` importable in tests
 ├── src/
-│   ├── api.py
-│   ├── perception.py
-│   ├── webcam.py
-│   ├── fusion.py
-│   ├── hazard_engine.py
-│   ├── survivor.py
-│   ├── thermal.py
-│   ├── risk_engine.py
-│   ├── priority_engine.py
-│   ├── safe_path.py
-│   ├── zone_mapper.py
-│   ├── recommendation_engine.py
-│   ├── main_pipeline.py
-│   ├── live_pipeline.py
-│   ├── shared_state.py
-│   └── sensor_data.py
-│
-├── Tests/
-├── alert.mp3
-├── requirements.txt
-├── state.json
-├── .gitignore
-└── README.md
+│   ├── api.py              # FastAPI backend
+│   ├── shelter_data.py     # real Egyptian shelter dataset
+│   ├── shelter_engine.py   # nearest-shelter search (haversine)
+│   ├── fake_sensor.py      # simulated telemetry engine
+│   ├── simulator.py        # background simulator thread
+│   ├── location_engine.py  # Egypt geo-validation
+│   ├── route_engine.py     # OSRM routing + fallback
+│   ├── data_engine.py      # persistence (SQLite + JSONL event store)
+│   ├── event_bus.py        # live pub/sub (SSE push to dashboards)
+│   ├── safe_path.py / safe_route_engine.py / zone_mapper.py / hazard_grid.py
+│   ├── perception.py / live_pipeline.py / webcam.py   # YOLO pipeline
+│   ├── fusion.py / survivor.py / thermal.py / sensor_data.py
+│   ├── hazard_engine.py / risk_engine.py / priority_engine.py
+│   └── recommendation_engine.py / shared_state.py / main_pipeline.py
+├── static/
+│   └── map.html            # dashboard prototype
+├── model/
+│   └── best.pt             # YOLO fire/smoke model
+└── Tests/                  # pytest suite (64 tests)
 ```
 
-## Frontend Integration
+## Testing
 
-The frontend dashboard can periodically request the API endpoints to retrieve the current AI system state.
-
-Main integration endpoints:
-
-```text
-/api/status
-/api/detection
-/api/risk
-/api/full
+```powershell
+pip install -r requirements-api.txt
+python -m pytest
 ```
 
-This allows the frontend to display:
+47 tests run against the detection engines, shelter search, location validation,
+the fake sensor simulator and the full API (including live sensor telemetry).
 
-- Fire alerts
-- Smoke alerts
-- Survivor information
-- Risk level
-- Rescue priority
-- Recommended actions
-- Safe route information
+## Deployment notes (for the backend teammate)
+
+- The API only needs the `requirements-api.txt` packages.
+- The dashboard is fully client-side (`static/map.html`); it only needs a route
+  to the API. When serving from a different domain, enable CORS (already
+  configured to `*`).
+- The fake sensor simulator can be disabled with
+  `POST /api/simulation/stop` or re-centered with `POST /api/incident`.
+- OSRM routing uses the public service (rate-limited for demos); the backend
+  automatically falls back to a straight-line estimate if it is unreachable.
 
 ## Technologies
 
-- Python
-- FastAPI
-- YOLO / Ultralytics
-- OpenCV
-- PyTorch
-- NumPy
-
-## Project Status
-
-The AFRICA RESQ backend provides the API integration layer between the AI processing pipeline and the frontend dashboard.
-
-The current system exposes real-time system status, fire and smoke detection, survivor information, and risk assessment through REST API endpoints.
+- Python / FastAPI / uvicorn
+- Leaflet + OpenStreetMap (dashboard)
+- OSRM public routing API
+- YOLO / Ultralytics / OpenCV (optional perception pipeline)
 
 ## Team Project
 
-AFRICA RESQ is developed as an AI-powered decision-support system for emergency response and search-and-rescue operations.
+AFRICA RESQ is developed as an AI-powered decision-support system for emergency
+response and search-and-rescue operations, hackathon build targeting Egypt.

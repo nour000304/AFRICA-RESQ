@@ -1,4 +1,7 @@
-from src.safe_path import SafePathPlanner
+try:
+    from src.safe_path import SafePathPlanner
+except ImportError:
+    from safe_path import SafePathPlanner
 
 
 class SafeRouteEngine:

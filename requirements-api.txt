@@ -1,0 +1,14 @@
+# Lightweight dependencies for the AFRICA RESQ backend + dashboard.
+# Install with:  pip install -r requirements-api.txt
+#
+# NOTE: For the full perception pipeline (camera / YOLO detection) use the
+# complete requirements.txt (adds torch, ultralytics, opencv, etc).
+
+fastapi==0.141.1
+uvicorn==0.52.4
+requests==2.34.2
+pydantic==2.13.4
+
+# For tests
+pytest==9.1.1
+httpx==0.28.1

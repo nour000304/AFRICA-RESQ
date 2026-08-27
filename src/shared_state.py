@@ -34,7 +34,9 @@ state = {
     },
     "priority": None,
     "route": [],
-    "recommendation": None
+    "recommendation": None,
+    "sensors": None,
+    "sensor_history": []
 }
 
 
@@ -49,4 +51,23 @@ def save_state():
         print("SMOKE STATE:", state["smoke"])
 
     except Exception as e:
-        print("ERROR SAVING STATE:", e)Get-ChildItem
+        print("ERROR SAVING STATE:", e)
+
+
+def load_state():
+
+    if not os.path.exists(STATE_FILE):
+        return state
+
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+
+        state.update(loaded)
+
+        return state
+
+    except Exception as e:
+        print("ERROR LOADING STATE:", e)
+
+        return state

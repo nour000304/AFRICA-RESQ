@@ -18,5 +18,7 @@
   },
   "priority": null,
   "route": [],
-  "recommendation": null
+  "recommendation": null,
+  "sensors": null,
+  "sensor_history": []
 }

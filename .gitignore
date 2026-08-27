@@ -3,6 +3,7 @@ __pycache__/
 
 .venv/
 venv/
+.venv-test/
 
 runs/
 
@@ -11,3 +12,7 @@ runs/
 .env
 .vscode/
 .idea/
+
+# Data store (created at runtime)
+data/*
+!data/.gitkeep
