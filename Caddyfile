@@ -1,0 +1,36 @@
+# TLS is automatic: Caddy provisions and renews a certificate for RESQ_DOMAIN on its
+# own. Websockets need no special configuration here -- reverse_proxy upgrades them.
+
+{
+	email {$RESQ_ACME_EMAIL}
+}
+
+{$RESQ_DOMAIN} {
+	encode zstd gzip
+
+	# The dashboard is a rescue tool, not a page to be framed or sniffed.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Fonts are content-addressed by name and never change in place.
+	@fonts path /fonts/*
+	header @fonts Cache-Control "public, max-age=31536000, immutable"
+
+	# The dashboard shell must not be cached: a stale build talking to a new server is
+	# the kind of bug you only find during an incident.
+	@shell path / /index.html
+	header @shell Cache-Control "no-store"
+
+	reverse_proxy resq:8000 {
+		# Long-lived websockets: do not cut a live mission off after a minute.
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}

@@ -1,0 +1,41 @@
+# AFRICA RESQ vhost for the visionxart VPS.
+#
+# The stock template that add-vps-site.sh writes does not upgrade websockets, and this
+# application is websockets: the rover pushes telemetry over one and every dashboard
+# reads state over another. Without the four directives below the page loads, sits on
+# "waiting for a rover" forever, and nothing ever appears.
+#
+# Install:
+#   sed -e "s/__DOMAIN__/resq.visionxart.com/" -e "s/__PORT__/3008/" \
+#       deploy/nginx-africa-resq.conf.template | \
+#       ssh visionxart "cat > /etc/nginx/sites-available/resq.visionxart.com"
+#   ssh visionxart "nginx -t && systemctl reload nginx"
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    client_max_body_size 6M;
+
+    location / {
+        proxy_pass http://127.0.0.1:__PORT__;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Websocket upgrade. Without these the dashboard never receives state.
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # A mission runs for hours and the socket is quiet between frames only if the
+        # rover drops out. The default 60 s read timeout would cut a live board.
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+
+        # Telemetry is small and time-critical; buffering it adds latency for nothing.
+        proxy_buffering off;
+    }
+}

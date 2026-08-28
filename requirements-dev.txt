@@ -1,0 +1,11 @@
+# Test dependencies.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest
+#
+# numpy is here for tests/test_perception.py, which exercises the box arithmetic with a
+# stub model. The real detector needs ultralytics (requirements-perception.txt); the
+# conversion under test does not, and a suite that pulls torch is a suite nobody runs.
+pytest>=8.0
+numpy>=1.24
+httpx>=0.27

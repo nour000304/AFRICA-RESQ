@@ -1,0 +1,78 @@
+# AFRICA RESQ — VPS deployment.
+#
+#   cp .env.example .env      # then fill in the domain and both tokens
+#   docker compose up -d
+#
+# Add the scripted rover for a hosted demo with no hardware attached:
+#   docker compose --profile demo up -d
+
+services:
+  resq:
+    build: .
+    image: africa-resq:latest
+    restart: unless-stopped
+    environment:
+      RESQ_ROVER_TOKEN: ${RESQ_ROVER_TOKEN:?set a rover token in .env}
+      RESQ_OPERATOR_TOKEN: ${RESQ_OPERATOR_TOKEN:?set an operator token in .env}
+      RESQ_MISSION_ID: ${RESQ_MISSION_ID:-RESQ-001}
+      RESQ_BROADCAST_HZ: ${RESQ_BROADCAST_HZ:-8}
+      # Where the survey grid sits on Earth. Without these the shelter and route answers
+      # are about somebody else's incident.
+      RESQ_ORIGIN_LAT: ${RESQ_ORIGIN_LAT:-30.0444}
+      RESQ_ORIGIN_LON: ${RESQ_ORIGIN_LON:-31.2357}
+      RESQ_GRID_BEARING: ${RESQ_GRID_BEARING:-0}
+      RESQ_RECORD: ${RESQ_RECORD:-1}
+      RESQ_RECORD_DIR: /data
+      RESQ_OSRM_URL: ${RESQ_OSRM_URL:-}
+    # Not published to the host: Caddy is the only way in, so there is no plain-HTTP
+    # port sitting open on the VPS for anyone who guesses the address.
+    expose:
+      - "8000"
+    # The mission record. The image already creates /data owned by the app user for
+    # exactly this; without the volume the ledger lives in the container's writable layer
+    # and goes with it on the next deploy.
+    volumes:
+      - resq_data:/data
+    networks: [resq]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [resq]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      RESQ_DOMAIN: ${RESQ_DOMAIN:?set your domain in .env}
+      RESQ_ACME_EMAIL: ${RESQ_ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [resq]
+
+  # Optional. The scripted rover, so a hosted instance has something to show.
+  simulator:
+    build: .
+    image: africa-resq:latest
+    restart: unless-stopped
+    depends_on: [resq]
+    profiles: [demo]
+    command: >-
+      python -m rover.simulator
+      --url ws://resq:8000/ws/rover
+      --token ${RESQ_ROVER_TOKEN}
+    networks: [resq]
+
+networks:
+  resq:
+
+volumes:
+  resq_data:
+  caddy_data:
+  caddy_config:

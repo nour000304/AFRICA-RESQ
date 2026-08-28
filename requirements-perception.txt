@@ -1,0 +1,10 @@
+# Rover-side only. The command server does not import any of this, and the server
+# image does not carry it -- see .dockerignore. Install this on the machine holding
+# the camera (a Pi, or a laptop running rover.camera_client).
+#
+#   pip install -r requirements.txt -r requirements-perception.txt
+#
+# torch arrives as a dependency of ultralytics. On a Raspberry Pi install the ARM
+# wheel first, or the resolver will spend a long time failing to build it.
+ultralytics>=8.1
+opencv-python>=4.8

@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+docs/
+*.md
+!README.md
+.DS_Store
+shots/
+
+# Rover-side only. The command server never loads a detector, so the PyTorch weights and
+# the perception dependency set stay out of the build context and out of the image.
+#
+# Anchored with a leading slash on purpose: dashboard/models/ holds the ONNX copies the
+# browser bench downloads, and those must ship. An unanchored `models/` is read as the
+# top-level directory only, but the slash says so out loud rather than relying on it.
+/models/
+requirements-perception.txt
+
+# The suite runs in CI and on a developer machine, never inside the served container.
+tests/
+pytest.ini
+requirements-dev.txt
