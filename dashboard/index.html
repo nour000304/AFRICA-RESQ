@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AFRICA RESQ — Rescue Command</title>
+<meta name="description" content="Live rescue command dashboard for the AFRICA RESQ emergency response rover.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0E1113">
+
+<!-- Link previews. WhatsApp, Slack and Telegram read these; all of them need og:image
+     to be an absolute URL, so this is the one place the deployed hostname is hardcoded. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="AFRICA RESQ">
+<meta property="og:title" content="AFRICA RESQ — Rescue Command">
+<meta property="og:description" content="Live rescue command dashboard for a search-and-rescue rover: survivor detections cross-checked between camera and thermal, atmosphere readings against exposure limits, and a risk score that says whether it is safe to send people in.">
+<meta property="og:url" content="https://africa.abdelkbirnainiaa.me/">
+<meta property="og:image" content="https://africa.abdelkbirnainiaa.me/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="590">
+<meta property="og:image:alt" content="The rescue dashboard: rover feed with person detections, a search-area grid with hazards, and a risk score of 33 out of 100.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="AFRICA RESQ — Rescue Command">
+<meta name="twitter:description" content="Live rescue command dashboard for a search-and-rescue rover.">
+<meta name="twitter:image" content="https://africa.abdelkbirnainiaa.me/og.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230E1113'/%3E%3Cpath d='M6 22h20M16 6v16' stroke='%23F2C300' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/barlow-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-mono-500.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/ibm-plex-sans-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<a class="skip" href="#risk">Skip to risk assessment</a>
+
+<!-- ─── status rail ─────────────────────────────────────────────────────── -->
+<header class="rail" role="banner">
+  <div class="rail__brand">
+    <span class="rail__mark" aria-hidden="true"></span>
+    <span class="rail__name" translate="no">Africa Resq</span>
+    <span class="rail__mission num" id="missionId" translate="no">RESQ-001</span>
+  </div>
+
+  <dl class="rail__stats">
+    <div class="stat"><dt>Elapsed</dt><dd id="clock" class="num">00:00</dd></div>
+    <div class="stat"><dt>Zone</dt><dd id="zone" class="num">--</dd></div>
+    <div class="stat"><dt>Battery</dt><dd id="battery" class="num">--</dd></div>
+    <div class="stat"><dt>Link</dt><dd id="link" class="num">--</dd></div>
+    <div class="stat"><dt>Rover</dt><dd id="roverStatus">standby</dd></div>
+  </dl>
+
+  <div class="rail__controls">
+    <form class="lock" id="lock" hidden>
+      <label class="sr-only" for="opkey">Operator key</label>
+      <input class="lock__key" id="opkey" type="password" name="operator-key"
+             autocomplete="current-password" spellcheck="false"
+             placeholder="Operator key…" hidden>
+      <button type="button" class="lock__btn" id="unlock">Unlock controls</button>
+    </form>
+
+    <div class="modes" role="group" aria-label="Control mode">
+      <button type="button" class="mode" data-mode="manual" aria-pressed="false">Manual</button>
+      <button type="button" class="mode is-on" data-mode="assisted" aria-pressed="true">Assisted</button>
+      <button type="button" class="mode" data-mode="autonomous" aria-pressed="false">Autonomous</button>
+    </div>
+    <button type="button" id="bench" class="alarm">Test detector</button>
+    <button type="button" id="alarm" class="alarm" aria-pressed="true">Alarm</button>
+    <button type="button" id="estop" class="estop" aria-pressed="false"
+            title="Stop the rover immediately. Esc does the same from anywhere.">
+      <span class="estop__label">Stop rover</span>
+    </button>
+  </div>
+</header>
+
+<!-- ─── link banner ─────────────────────────────────────────────────────── -->
+<div id="banner" class="banner" role="status" hidden>
+  <span class="banner__text">Waiting for a rover. Start the simulator, or bring the rover online.</span>
+  <code class="banner__hint" translate="no">python -m rover.simulator</code>
+</div>
+
+<main class="deck">
+
+  <!-- column 1 — what the rover sees -->
+  <div class="col">
+    <section class="panel panel--feed" aria-labelledby="h-feed">
+      <div class="panel__hd">
+        <h2 id="h-feed">Feed</h2>
+        <span class="tag" id="feedSource">no signal</span>
+      </div>
+      <div class="feed">
+        <canvas id="feed" width="960" height="600" role="img"
+                aria-label="Rover camera view with detection overlay. No signal."></canvas>
+        <span class="feed__live" id="feedLive" hidden><i></i>Live</span>
+        <div class="feed__legend" id="feedLegend"></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-det">
+      <div class="panel__hd">
+        <h2 id="h-det">Detections</h2>
+        <span class="tag" id="thermalTag">thermal offline</span>
+      </div>
+      <ul class="dets" id="dets">
+        <li class="empty">Nothing in view.</li>
+      </ul>
+    </section>
+
+    <section class="panel" id="atmo-panel" aria-labelledby="h-atmo">
+      <div class="panel__hd"><h2 id="h-atmo">Atmosphere</h2><span class="tag" id="atmoTag"></span></div>
+      <div class="gauges" id="gauges"></div>
+    </section>
+  </div>
+
+  <!-- column 2 — where everything is -->
+  <div class="col">
+    <section class="panel panel--map" aria-labelledby="h-map">
+      <div class="panel__hd">
+        <h2 id="h-map">Search area</h2>
+        <span class="tag" id="mapTag">24&nbsp;×&nbsp;18&nbsp;m · 3&nbsp;m cells</span>
+      </div>
+      <div class="map">
+        <canvas id="map" width="960" height="720" role="img"
+                aria-label="Survey grid showing the rover, survivors, hazards and the recommended route. No telemetry."></canvas>
+      </div>
+      <ul class="mapkey">
+        <li><i class="k k--rover"></i>Rover</li>
+        <li><i class="k k--surv"></i>Survivor</li>
+        <li><i class="k k--haz"></i>Hazard</li>
+        <li><i class="k k--route"></i>Recommended</li>
+        <li><i class="k k--alt"></i>Rejected</li>
+      </ul>
+    </section>
+
+    <section class="panel panel--surv" aria-labelledby="h-surv">
+      <div class="panel__hd">
+        <h2 id="h-surv">Survivors</h2>
+        <span class="tag">by rescue priority</span>
+      </div>
+      <ol class="survivors" id="survivors">
+        <li class="empty">No contacts yet. The sweep is still running.</li>
+      </ol>
+    </section>
+  </div>
+
+  <!-- column 3 — what to do about it -->
+  <div class="col col--decide">
+    <section class="panel panel--risk" id="risk" aria-labelledby="h-risk">
+      <div class="panel__hd"><h2 id="h-risk">Risk</h2><span class="tag" id="entryTag"></span></div>
+
+      <div class="score">
+        <span class="score__num num" id="riskScore">--</span>
+        <span class="score__of">/100</span>
+        <span class="score__band" id="riskBand">standby</span>
+      </div>
+      <p class="score__say" id="riskSay">No rover reporting. Nothing has been measured.</p>
+
+      <div class="ledger">
+        <div class="ledger__bar" id="ledgerBar" aria-hidden="true">
+          <div class="ledger__ticks">
+            <span style="bottom:25%"></span>
+            <span style="bottom:50%"></span>
+            <span style="bottom:75%"></span>
+          </div>
+        </div>
+        <ul class="ledger__list" id="ledgerList"></ul>
+      </div>
+    </section>
+
+    <section class="panel panel--act" aria-labelledby="h-act">
+      <div class="panel__hd"><h2 id="h-act">Next</h2></div>
+      <ol class="acts" id="acts" aria-live="polite">
+        <li class="empty">Connect a rover to get a recommendation.</li>
+      </ol>
+    </section>
+
+    <section class="panel panel--shelter" aria-labelledby="h-shelter">
+      <div class="panel__hd">
+        <h2 id="h-shelter">Shelter</h2>
+        <span class="tag" id="shelterTag">loading</span>
+      </div>
+      <ol class="shelters" id="shelters">
+        <li class="empty">Looking up the nearest evacuation points.</li>
+      </ol>
+    </section>
+
+    <section class="panel panel--log" aria-labelledby="h-log">
+      <div class="panel__hd"><h2 id="h-log">Log</h2></div>
+      <ol class="log" id="log" aria-live="polite"></ol>
+    </section>
+  </div>
+
+</main>
+
+<!-- ─── detector bench ──────────────────────────────────────────────────── -->
+<div class="bench" id="benchPanel" role="dialog" aria-modal="true"
+     aria-labelledby="benchTitle" hidden>
+  <div class="bench__box">
+    <header class="bench__head">
+      <div>
+        <h2 class="bench__title" id="benchTitle">Detector bench</h2>
+        <p class="bench__sub">The rover's two models, running on your camera, on your
+          machine. Nothing is sent to the server and the mission behind this panel is
+          untouched.</p>
+      </div>
+      <button type="button" class="bench__close" id="benchClose"
+              title="Close and release the camera">Close</button>
+    </header>
+
+    <div class="bench__stage">
+      <video id="benchVideo" playsinline muted></video>
+      <canvas id="benchCanvas"></canvas>
+      <button type="button" class="bench__start" id="benchStart">Use my camera</button>
+    </div>
+
+    <p class="bench__status" id="benchStatus">Your camera stays on this machine.</p>
+    <ul class="bench__list" id="benchList">
+      <li class="bench__none">No detections yet.</li>
+    </ul>
+    <p class="bench__foot">This is not a rover: a browser has no gas sensor, no thermal
+      array and no position, so nothing here reaches the survey grid or the risk ledger.
+      It answers one question — whether the detection is real.</p>
+  </div>
+</div>
+
+<script src="js/theme.js"></script>
+<script src="js/video.js"></script>
+<script src="js/map.js"></script>
+<script src="js/risk.js"></script>
+<script src="js/alarm.js"></script>
+<script src="js/shelter.js"></script>
+<script src="js/bench.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

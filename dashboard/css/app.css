@@ -1,0 +1,693 @@
+/* AFRICA RESQ — rescue command dashboard
+ *
+ * Operate surface. Read under stress, at night, on a laptop in a truck. Every choice
+ * below serves scanning speed first.
+ *
+ * Vocabulary borrowed from the equipment the users already trust: gas-detector
+ * placards (hi-vis yellow on black, diagonal hazard banding), stencilled condensed
+ * equipment labels, and the thermal "ironbow" ramp — which is also the risk ramp, so
+ * hotter always means worse, in the camera and in the meter alike.
+ */
+
+:root {
+  /* ground */
+  --ash:      #0E1113;
+  --ash-2:    #14181A;
+  --ash-3:    #1A2023;
+  --rule:     #232B2E;
+  --rule-hi:  #364347;
+
+  /* ink */
+  --bone:      #E7EAE8;
+  --bone-dim:  #97A2A5;
+  --bone-mute: #5E6A6E;
+
+  /* signal — the ironbow ramp, cold to hot */
+  --safe:   #3FBF6A;
+  --hivis:  #F2C300;
+  --ember:  #FF7A1F;
+  --flare:  #FF3B30;
+
+  /* type */
+  --display: 'Barlow Condensed', 'Helvetica Neue Condensed', 'Arial Narrow', sans-serif;
+  --body: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --data: 'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* rhythm */
+  --pad: 14px;
+  --gap: 1px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* The host page ships a minimal reset, not a full one. Definition lists, headings and
+   paragraphs still arrive with user-agent margins, which show up as grey bands wherever
+   a container paints its own background between children. */
+h1, h2, h3, p, dl, dd, ol, ul, figure { margin: 0; }
+ol, ul { padding: 0; }
+
+html, body { height: 100%; }
+
+html {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: rgba(242, 195, 0, 0.25);
+}
+
+body {
+  margin: 0;
+  background: var(--ash);
+  color: var(--bone);
+  font: 400 14px/1.45 var(--body);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Every readout is a number an operator compares against the last one they read, so
+   digits must not shift width between frames. */
+.num, .tag, .pct, .gauge dd, .gauge .limit, .ledger__pts, .ledger__read,
+.sv__zone, .sv__fix, .sv__conf, .sv__rank, .sv__why span, .sv__route b,
+.log time, .banner__hint, .rail__mission, .dets .cls small {
+  font-variant-numeric: tabular-nums;
+}
+.num { font-family: var(--data); letter-spacing: -0.01em; }
+
+button { touch-action: manipulation; }
+
+/* Panels that scroll must not hand the scroll on to the page behind them. */
+.dets, .survivors, .acts, .log { overscroll-behavior: contain; }
+
+.skip {
+  position: absolute; left: 8px; top: -60px; z-index: 40;
+  background: var(--hivis); color: #000; padding: 8px 14px; font-weight: 600;
+  transition: top 120ms ease;
+}
+.skip:focus { top: 8px; }
+
+:focus-visible {
+  outline: 2px solid var(--hivis);
+  outline-offset: 2px;
+}
+
+/* ─── status rail ──────────────────────────────────────────────────────── */
+
+.rail {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+  padding: 0 max(var(--pad), env(safe-area-inset-right)) 0 max(var(--pad), env(safe-area-inset-left));
+  height: 54px;
+  background: var(--ash-2);
+  border-bottom: 1px solid var(--rule);
+  flex: none;
+}
+
+.rail__brand { display: flex; align-items: center; gap: 10px; padding-right: 20px; border-right: 1px solid var(--rule); }
+
+.rail__mark {
+  width: 16px; height: 16px;
+  background:
+    linear-gradient(var(--hivis), var(--hivis)) 0 50% / 100% 3px no-repeat,
+    linear-gradient(var(--hivis), var(--hivis)) 50% 0 / 3px 100% no-repeat;
+}
+
+.rail__name {
+  font-family: var(--display);
+  font-weight: 700; font-size: 22px; letter-spacing: 0.10em;
+  text-transform: uppercase; line-height: 1;
+}
+
+.rail__mission {
+  font-family: var(--data); font-size: 11px; color: var(--bone-dim);
+  border: 1px solid var(--rule-hi); padding: 2px 6px; letter-spacing: 0.04em;
+}
+
+.rail__stats { display: flex; align-items: center; gap: 22px; margin: 0; flex: 1 1 auto; min-width: 0; }
+.stat { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; }
+.stat dt {
+  font-family: var(--display); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--bone-mute); line-height: 1;
+}
+.stat dd { margin: 0; font-size: 14px; line-height: 1.1; white-space: nowrap; }
+.stat dd.is-warn { color: var(--hivis); }
+.stat dd.is-bad  { color: var(--flare); }
+
+.rail__controls { display: flex; align-items: center; gap: 10px; flex: none; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* Watching is open; commanding is not. The lock states that plainly rather than
+   leaving an operator to guess why a button does nothing. */
+.lock { display: flex; align-items: center; gap: 6px; }
+.lock[hidden] { display: none; }
+.lock__btn {
+  appearance: none; cursor: pointer;
+  border: 1px solid var(--rule-hi); background: transparent; color: var(--hivis);
+  font-family: var(--display); font-size: 13px; letter-spacing: 0.10em; text-transform: uppercase;
+  padding: 7px 11px 6px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.lock__btn:hover { background: var(--ash-3); border-color: var(--hivis); }
+.lock__key {
+  font-family: var(--data); font-size: 12px;
+  background: var(--ash); color: var(--bone);
+  border: 1px solid var(--hivis); padding: 6px 8px; width: 168px;
+}
+.lock__key::placeholder { color: var(--bone-mute); }
+.lock__key[hidden] { display: none; }
+
+.mode[disabled], .estop[disabled] { opacity: 0.4; cursor: not-allowed; }
+.mode[disabled]:hover { background: none; color: var(--bone-dim); }
+.estop[disabled]:hover { background: transparent; }
+
+.modes { display: flex; border: 1px solid var(--rule-hi); }
+.mode {
+  appearance: none; background: none; border: 0; border-right: 1px solid var(--rule-hi);
+  color: var(--bone-dim); cursor: pointer;
+  font-family: var(--display); font-size: 13px; letter-spacing: 0.10em; text-transform: uppercase;
+  padding: 7px 11px 6px;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.mode:last-child { border-right: 0; }
+
+/* The alarm toggle is a viewer preference, not a command, so it is never disabled by
+   the operator lock -- someone watching read-only still needs to silence their own
+   speakers. */
+.alarm {
+  font: inherit; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 6px 10px; background: none; color: var(--bone-dim);
+  border: 1px solid var(--rule-hi); cursor: pointer; white-space: nowrap;
+}
+.alarm:hover { color: var(--bone); background: var(--ash-3); }
+.alarm.is-on { color: var(--hivis); border-color: var(--hivis); }
+.mode:hover { color: var(--bone); background: var(--ash-3); }
+.mode.is-on { background: var(--bone); color: var(--ash); }
+
+.estop {
+  appearance: none; cursor: pointer;
+  border: 1px solid var(--flare);
+  background: transparent; color: var(--flare);
+  font-family: var(--display); font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 8px 16px 7px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.estop:hover { background: rgba(255, 59, 48, 0.14); }
+.estop.is-on {
+  background: var(--flare); color: #fff; border-color: var(--flare);
+}
+.estop.is-arming {
+  background: transparent; color: var(--hivis); border-color: var(--hivis);
+  animation: arming 1s steps(2, jump-none) infinite;
+}
+@keyframes arming { 50% { background: rgba(242, 195, 0, 0.16); } }
+
+/* ─── link banner ──────────────────────────────────────────────────────── */
+
+.banner {
+  display: flex; align-items: center; gap: 14px; flex: none;
+  padding: 9px var(--pad);
+  background: repeating-linear-gradient(-45deg, #1a1a12 0 10px, #12130e 10px 20px);
+  border-bottom: 1px solid var(--hivis);
+  color: var(--hivis);
+  font-size: 13px;
+}
+.banner[hidden] { display: none; }
+.banner__hint {
+  font-family: var(--data); font-size: 12px; color: var(--bone-dim);
+  border: 1px solid var(--rule-hi); padding: 1px 6px;
+}
+
+/* ─── deck ─────────────────────────────────────────────────────────────── */
+
+.deck {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(0, 1fr) 348px;
+  gap: var(--gap);
+  background: var(--rule);
+}
+
+/* On a laptop in a truck the viewport is short as often as it is narrow, and a column
+   whose panels add up to more than the screen has to put the difference somewhere. Left
+   to itself it puts it past the bottom edge, where `body { overflow: hidden }` makes it
+   unreachable — the decide column loses Log first, then Shelter, and the operator has no
+   way to know a panel is missing. Same failure the width breakpoint below guards against,
+   so: same answer. The scrollbar only exists on the screens that could not fit the deck. */
+.col {
+  display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+
+.panel {
+  background: var(--ash-2);
+  display: flex; flex-direction: column; min-height: 0; position: relative;
+}
+
+/* hazard banding appears only when the panel is reporting a hazard — a placard, not decor */
+.panel[data-state="danger"]::before,
+.panel[data-state="critical"]::before {
+  content: ""; position: absolute; inset: 0 0 auto; height: 3px; z-index: 2;
+  background: repeating-linear-gradient(-45deg, var(--hivis) 0 7px, var(--ash) 7px 14px);
+}
+.panel[data-state="critical"]::before {
+  background: repeating-linear-gradient(-45deg, var(--flare) 0 7px, var(--ash) 7px 14px);
+}
+
+.panel__hd {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 9px var(--pad) 8px;
+  border-bottom: 1px solid var(--rule);
+  flex: none;
+}
+.panel__hd h2 {
+  margin: 0; text-wrap: balance;
+  font-family: var(--display); font-weight: 600; font-size: 15px;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--bone);
+}
+.tag {
+  font-family: var(--data); font-size: 10.5px; letter-spacing: 0.03em;
+  color: var(--bone-mute); text-align: right;
+}
+.tag.is-on   { color: var(--safe); }
+.tag.is-warn { color: var(--hivis); }
+.tag.is-bad  { color: var(--flare); }
+
+.empty { color: var(--bone-mute); font-size: 13px; padding: 12px var(--pad); }
+
+/* ─── feed ─────────────────────────────────────────────────────────────── */
+
+.panel--feed { flex: 1 1 56%; min-height: 260px; }
+.feed { position: relative; flex: 1 1 auto; min-height: 0; background: #07090A; }
+.feed canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.feed__live {
+  position: absolute; top: 10px; left: 10px; z-index: 2;
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--display); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--bone); background: rgba(7, 9, 10, 0.72); padding: 3px 8px;
+}
+.feed__live i { width: 7px; height: 7px; background: var(--flare); border-radius: 50%; animation: beat 2s infinite; }
+@keyframes beat { 0%, 60%, 100% { opacity: 1; } 80% { opacity: 0.25; } }
+
+.feed__legend {
+  position: absolute; right: 10px; bottom: 10px; z-index: 2;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 6px; max-width: 70%;
+}
+.feed__legend span {
+  font-family: var(--data); font-size: 10px; letter-spacing: 0.04em;
+  background: rgba(7, 9, 10, 0.78); padding: 2px 6px; border-left: 2px solid currentColor;
+}
+
+/* ─── detections ───────────────────────────────────────────────────────── */
+
+.dets { list-style: none; margin: 0; padding: 6px 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.dets li { display: grid; grid-template-columns: 104px 1fr 44px; align-items: center; gap: 10px; padding: 5px var(--pad); }
+.dets .cls {
+  font-family: var(--display); font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dets .cls small { font-family: var(--data); font-size: 10px; letter-spacing: 0; color: var(--bone-mute); margin-left: 4px; }
+.dets .meter { height: 4px; background: var(--ash-3); }
+.dets .meter i { display: block; height: 100%; background: currentColor; }
+.dets .pct { font-family: var(--data); font-size: 12px; text-align: right; color: var(--bone-dim); }
+.dets .corr { grid-column: 1 / -1; font-size: 11.5px; color: var(--bone-mute); padding-left: 0; margin-top: -2px; }
+
+/* ─── atmosphere ───────────────────────────────────────────────────────── */
+
+/* Flex rather than grid: an auto-fit grid leaves the last row of five readings with an
+   empty cell at most widths, and a gap in a row of instruments reads as a dead sensor. */
+.gauges {
+  display: flex; flex-wrap: wrap; align-content: flex-start;
+  gap: 1px; background: var(--rule); flex: none;
+}
+.gauge {
+  background: var(--ash-2); padding: 8px 10px 9px;
+  flex: 1 1 120px; min-width: 0; min-height: 62px;
+}
+.gauge dt {
+  font-family: var(--display); font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--bone-mute);
+}
+.gauge dd { margin: 2px 0 0; font-family: var(--data); font-size: 17px; letter-spacing: -0.02em; }
+.gauge .unit { font-size: 11px; color: var(--bone-mute); margin-left: 2px; }
+.gauge .limit { display: block; font-size: 10.5px; color: var(--bone-mute); margin-top: 2px; font-family: var(--data); }
+.gauge[data-level="warn"] dd { color: var(--hivis); }
+.gauge[data-level="bad"] dd  { color: var(--ember); }
+.gauge[data-level="crit"] dd { color: var(--flare); }
+.gauge[data-level="none"] dd { color: var(--bone-mute); font-size: 13px; }
+
+/* ─── map ──────────────────────────────────────────────────────────────── */
+
+.panel--map { flex: 1 1 58%; min-height: 300px; }
+.map { position: relative; flex: 1 1 auto; min-height: 0; background: #0A0D0E; }
+.map canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.mapkey {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; flex: none;
+  padding: 7px var(--pad); border-top: 1px solid var(--rule);
+  font-size: 11.5px; color: var(--bone-dim);
+}
+.mapkey li { display: flex; align-items: center; gap: 6px; }
+.k { width: 12px; height: 3px; display: inline-block; }
+.k--rover { background: var(--bone); height: 9px; width: 9px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.k--surv  { background: var(--flare); height: 9px; width: 9px; border-radius: 50%; }
+.k--haz   { background: repeating-linear-gradient(-45deg, var(--hivis) 0 3px, transparent 3px 6px); height: 9px; width: 9px; }
+.k--route { background: var(--safe); }
+.k--alt   { background: repeating-linear-gradient(90deg, var(--bone-mute) 0 4px, transparent 4px 8px); }
+
+/* ─── survivors ────────────────────────────────────────────────────────── */
+
+.survivors { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.survivors > li { border-bottom: 1px solid var(--rule); padding: 10px var(--pad) 11px; }
+.survivors > li:last-child { border-bottom: 0; }
+
+.sv__top { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.sv__rank {
+  font-family: var(--data); font-size: 12px; color: var(--ash); background: var(--bone-dim);
+  padding: 1px 5px; flex: none;
+}
+.sv__id {
+  font-family: var(--display); font-size: 19px; letter-spacing: 0.06em; text-transform: uppercase;
+  line-height: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sv__zone { font-family: var(--data); font-size: 13px; color: var(--hivis); }
+.sv__tier {
+  margin-left: auto; flex: none; font-family: var(--display); font-size: 13px; letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.sv__conf { margin-left: 8px; font-family: var(--data); font-size: 14px; flex: none; }
+
+.sv__bar { height: 3px; background: var(--ash-3); margin: 8px 0 7px; }
+.sv__bar i { display: block; height: 100%; background: var(--flare); }
+
+.sv__why { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.sv__why span {
+  font-family: var(--data); font-size: 10.5px; color: var(--bone-dim);
+  border: 1px solid var(--rule-hi); padding: 1px 5px;
+}
+.sv__why span.is-neg { color: var(--ember); border-color: rgba(255, 122, 31, 0.4); }
+.sv__why span.is-pos { color: var(--safe); border-color: rgba(63, 191, 106, 0.35); }
+.sv__route { margin: 7px 0 0; font-size: 12px; color: var(--bone-dim); }
+.sv__route b { font-family: var(--data); font-weight: 500; color: var(--bone); }
+.sv--stale { opacity: 0.5; }
+
+/* ─── risk ledger — the signature ──────────────────────────────────────── */
+
+.col--decide { background: var(--ash-2); }
+.panel--risk { flex: 1 1 44%; min-height: 230px; }
+
+.score { display: flex; align-items: baseline; gap: 6px; padding: 12px var(--pad) 0; flex: none; }
+.score__num {
+  font-size: 62px; line-height: 0.86; font-weight: 500; letter-spacing: -0.04em;
+  font-family: var(--data);
+}
+.score__of { font-family: var(--data); font-size: 13px; color: var(--bone-mute); }
+.score__band {
+  margin-left: auto; font-family: var(--display); font-size: 22px; letter-spacing: 0.10em;
+  text-transform: uppercase; line-height: 1;
+}
+.score__say {
+  margin: 8px var(--pad) 12px; font-size: 12.5px; color: var(--bone-dim); flex: none;
+  text-wrap: pretty;
+}
+
+.ledger {
+  display: flex; gap: 10px; padding: 0 var(--pad) var(--pad);
+  flex: 1 1 auto; min-height: 0;
+}
+
+/* Hairlines mark the band thresholds. The empty part of the column stays empty — a
+   tinted "unused" region reads as a filled one at a glance, which is the one thing a
+   risk meter must never do. */
+.ledger__bar {
+  position: relative; width: 26px; flex: none;
+  display: flex; flex-direction: column-reverse;
+  border: 1px solid var(--rule-hi);
+  background: var(--ash-3);
+}
+.ledger__seg { position: relative; min-height: 2px; }
+.ledger__seg + .ledger__seg { border-bottom: 1px solid rgba(14, 17, 19, 0.65); }
+.ledger__seg--gap { background: transparent; }
+
+.ledger__ticks { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.ledger__ticks span {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 1px solid rgba(151, 162, 165, 0.28);
+}
+
+/* `overflow: hidden` is the backstop, not the plan. The stack is column-reverse, so
+   anything it cannot hold grows out of the *top* of the box and prints over the summary
+   sentence above it — the one part of this panel that must always stay readable.
+   RiskLedger folds the smallest causes together so it never comes to that; this is what
+   catches the case it did not foresee. */
+.ledger__list {
+  list-style: none; margin: 0; padding: 0; flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column-reverse; overflow: hidden;
+}
+/* A row is the slice beside it, so its height is not ours to choose. `overflow: hidden`
+   is the guarantee that whatever height it is given, its text stays inside it: a label
+   printing over the cause below is worse than a label that is cut short. */
+.ledger__row {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 15px; padding: 1px 0; overflow: hidden;
+}
+.ledger__row--gap { min-height: 0; }
+.ledger__body { min-width: 0; flex: 1 1 auto; }
+.ledger__label {
+  font-family: var(--display); font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+  line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ledger__read {
+  font-family: var(--data); font-size: 10.5px; color: var(--bone-mute);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ledger__pts { font-family: var(--data); font-size: 12px; color: var(--bone-dim); flex: none; }
+
+/* Too short for two lines: the reading goes, the label stays. */
+.ledger__row--tight .ledger__read { display: none; }
+.ledger__row--tight .ledger__label { font-size: 12px; }
+/* Too short even for that: shrink to fit rather than spill. */
+.ledger__row--micro .ledger__label { font-size: 10.5px; letter-spacing: 0.04em; }
+.ledger__row--micro .ledger__pts { font-size: 10.5px; }
+
+/* The folded row stands for causes too small to be given their own line here. It is a
+   summary, so it reads as one: dimmer than anything it stands in for. */
+.ledger__row--rest .ledger__pts { color: var(--bone-mute); }
+.ledger__row--rest .ledger__read { text-transform: lowercase; }
+
+.ledger__empty { color: var(--bone-mute); font-size: 12.5px; align-self: center; }
+
+/* ─── next actions ─────────────────────────────────────────────────────── */
+
+.panel--act { flex: 1 1 32%; min-height: 128px; }
+.acts { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.acts > li { padding: 10px var(--pad) 11px; border-bottom: 1px solid var(--rule); border-left: 3px solid var(--bone-mute); }
+.acts > li:last-child { border-bottom: 0; }
+.acts .do { font-size: 13.5px; line-height: 1.35; text-wrap: pretty; }
+.acts .because { display: block; margin-top: 3px; font-size: 11.5px; color: var(--bone-mute); text-wrap: pretty; }
+.acts li[data-urgency="critical"] { border-left-color: var(--flare); }
+.acts li[data-urgency="critical"] .do { color: var(--flare); font-weight: 600; }
+.acts li[data-urgency="warning"] { border-left-color: var(--hivis); }
+.acts li[data-urgency="hold"] { border-left-color: var(--ember); }
+.acts li[data-urgency="info"] { border-left-color: var(--rule-hi); }
+
+/* ─── log ──────────────────────────────────────────────────────────────── */
+
+/* Shelter — where the survivors go once they are out.
+   No colour on this panel. Every other list on this screen uses the ironbow ramp to say
+   how bad something is, and a shelter is not a hazard: tinting one would put it on the
+   same scale as a fire. Direction is carried by rotation, distance by the number. */
+.panel--shelter { flex: 1 1 26%; min-height: 104px; }
+.shelters { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.shelters > li { padding: 9px var(--pad) 10px; border-bottom: 1px solid var(--rule); }
+.shelters > li:last-child { border-bottom: 0; }
+
+.sh__top {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  align-items: baseline;
+  column-gap: 8px;
+}
+.sh__arrow {
+  font-size: 13px; line-height: 1; color: var(--bone-dim);
+  display: inline-block; transform-origin: 50% 50%; justify-self: center;
+}
+.sh__name {
+  font-size: 13px; color: var(--bone); line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sh__dir {
+  font-family: var(--data); font-size: 11px; letter-spacing: .04em; color: var(--bone-mute);
+}
+.sh__km { font-family: var(--data); font-size: 12px; color: var(--bone); }
+.sh__sub, .sh__eta {
+  grid-column: 2 / -1;
+  font-size: 11.5px; color: var(--bone-mute); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sh__sub, .sh__eta { margin-left: 22px; }
+.sh__eta { color: var(--bone-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sh__arrow { transition: none; }
+}
+
+.panel--log { flex: 1 1 24%; min-height: 92px; }
+.log { list-style: none; margin: 0; padding: 6px 0 10px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.log li { display: flex; gap: 9px; padding: 2px var(--pad); font-size: 12px; color: var(--bone-dim); }
+.log li span { min-width: 0; overflow-wrap: anywhere; }
+.log time { font-family: var(--data); font-size: 11px; color: var(--bone-mute); flex: none; }
+.log li[data-level="critical"] { color: var(--flare); }
+.log li[data-level="alert"] { color: var(--hivis); }
+.log li[data-level="warning"] { color: var(--ember); }
+
+/* ─── scrollbars ───────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--ash); }
+::-webkit-scrollbar-thumb { background: var(--rule-hi); }
+::-webkit-scrollbar-thumb:hover { background: var(--bone-mute); }
+
+/* ─── narrower screens ─────────────────────────────────────────────────── */
+
+/* Below this width the deck stops being a single screenful and becomes a scrolling
+   page. Every panel that was sharing the viewport by percentage has to take an
+   intrinsic height instead, or a flex child with a zero basis inside a container of
+   indefinite height collapses to nothing and the panels stack on top of each other. */
+@media (max-width: 1180px) {
+  /* The deck stops being a flex item that shrinks to the viewport. If it keeps
+     shrinking, every panel inside it that is allowed to shrink collapses to its 1px
+     hazard stripe and the page silently loses whole sections. */
+  body { overflow: auto; height: auto; min-height: 100%; }
+  .deck { flex: none; }
+  .panel { flex: none; }
+  /* The page is the scroller now. A column that also scrolls would swallow the gesture
+     and strand the panels below it. */
+  .col { overflow: visible; }
+
+  .deck { grid-template-columns: minmax(0, 1fr) 340px; }
+  .col--decide { grid-column: 2; grid-row: 1 / span 2; }
+  .col:nth-child(2) { grid-column: 1; }
+
+  .panel--feed, .panel--map { flex: none; height: 360px; }
+  .panel--surv, .panel--risk, .panel--act, .panel--shelter, .panel--log { flex: none; }
+  .dets, .survivors, .acts, .shelters { overflow: visible; min-height: 0; }
+  .log { max-height: 260px; }
+  .ledger { min-height: 300px; }
+}
+
+@media (max-width: 860px) {
+  .deck {
+    grid-template-columns: minmax(0, 1fr);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .col--decide { grid-column: 1; grid-row: auto; }
+
+  .rail { height: auto; flex-wrap: wrap; gap: 12px; padding: 10px var(--pad); }
+  .rail__brand { border-right: 0; padding-right: 0; }
+  .rail__stats { gap: 16px; order: 3; width: 100%; flex-wrap: wrap; }
+  .rail__controls { margin-left: auto; }
+
+  .panel--feed, .panel--map { height: 300px; }
+  .ledger { min-height: 260px; }
+  .gauge { flex-basis: 30%; }
+}
+
+@media (max-width: 520px) {
+  .rail__controls { width: 100%; }
+  .modes { flex: 1 1 auto; }
+  .mode { flex: 1 1 auto; }
+  .score__num { font-size: 52px; }
+  .panel--feed, .panel--map { height: 260px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.panel--surv { flex: 1 1 42%; min-height: 150px; }
+.sv__fix { font-family: var(--data); font-size: 10.5px; color: var(--bone-mute); }
+
+/* ── detector bench ──────────────────────────────────────────────────────────
+   An overlay, not a panel in the grid: the mission behind it keeps running and
+   keeps rendering, because the bench is a side question and not the board. */
+.bench {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(6, 8, 9, 0.82);
+}
+.bench[hidden] { display: none; }
+
+.bench__box {
+  width: min(760px, 100%); max-height: 100%;
+  display: flex; flex-direction: column; gap: var(--pad);
+  padding: var(--pad) var(--pad) 18px;
+  background: var(--ash-2); border: 1px solid var(--rule-hi);
+  overflow-y: auto;
+}
+
+.bench__head { display: flex; align-items: flex-start; gap: 16px; }
+.bench__title {
+  font-family: var(--display); font-size: 22px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--bone);
+}
+.bench__sub { margin-top: 5px; font-size: 12.5px; color: var(--bone-dim); max-width: 58ch; }
+.bench__close {
+  flex: none; font: inherit; font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 6px 12px; cursor: pointer;
+  background: none; color: var(--bone-dim); border: 1px solid var(--rule-hi);
+}
+.bench__close:hover { color: var(--bone); background: var(--ash-3); }
+
+.bench__stage {
+  position: relative; background: var(--ash);
+  border: 1px solid var(--rule); aspect-ratio: 4 / 3;
+  display: flex; align-items: center; justify-content: center;
+}
+.bench__stage video, .bench__stage canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+}
+.bench__stage canvas { pointer-events: none; }
+
+.bench__start {
+  position: relative; z-index: 1;
+  font: inherit; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 12px 22px; cursor: pointer;
+  background: var(--hivis); color: #000; border: 0; font-weight: 600;
+}
+.bench__start:hover { filter: brightness(1.08); }
+.bench__start[disabled] { opacity: 0.5; cursor: wait; }
+
+.bench__status { font-family: var(--data); font-size: 11.5px; color: var(--bone-dim); }
+.bench__status[data-kind="busy"] { color: var(--hivis); }
+.bench__status[data-kind="live"] { color: var(--safe); }
+.bench__status[data-kind="bad"] { color: var(--flare); }
+
+.bench__list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.bench__row { display: flex; align-items: center; gap: 10px; }
+.bench__cls {
+  font-family: var(--display); font-size: 14px; letter-spacing: 0.06em;
+  text-transform: uppercase; flex: none; width: 88px;
+}
+.bench__bar { flex: 1 1 auto; height: 4px; background: var(--ash-3); }
+.bench__bar i { display: block; height: 100%; }
+.bench__pct {
+  font-family: var(--data); font-size: 12px; color: var(--bone-dim);
+  flex: none; font-variant-numeric: tabular-nums;
+}
+.bench__none { font-size: 12.5px; color: var(--bone-mute); }
+
+.bench__foot {
+  font-size: 12px; color: var(--bone-mute); max-width: 66ch;
+  border-top: 1px solid var(--rule); padding-top: 12px;
+}
