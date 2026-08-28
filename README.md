@@ -9,6 +9,11 @@ The system combines computer vision, hazard analysis, risk assessment, survivor
 detection, **nearest emergency-shelter search** and decision-support components,
 all exposed through a FastAPI backend that feeds a real-time **dashboard**.
 
+> **One repo, two builds.** This repository hosts the whole project: the AI /
+> data-engineering / API backend in the repo root, and the fully-built command
+> dashboard (its own frontend, server and rover simulator) under
+> [`dashboard/`](dashboard/). See [Project Structure](#project-structure).
+
 ## What's inside (hackathon prototype)
 
 | Feature | Description |
@@ -254,7 +259,13 @@ AFRICA-RESQ/
 │   └── map.html            # dashboard prototype
 ├── model/
 │   └── best.pt             # YOLO fire/smoke model
-└── Tests/                  # pytest suite (64 tests)
+├── dashboard/              # command dashboard app (self-contained, see its own README)
+│   ├── index.html          # live rescue command dashboard (frontend)
+│   ├── server/             # command server (uvicorn main:app)
+│   ├── rover/              # rover simulator shown in the dashboard
+│   ├── models/             # fire_smoke + yolov8n (.pt / .onnx)
+│   └── Dockerfile, docker-compose.yml, deploy/ ...
+└── Tests/                  # pytest suite (68 tests)
 ```
 
 ## Testing
