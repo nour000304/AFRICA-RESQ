@@ -26,7 +26,7 @@ cat /root/.ssh/resq_deploy.pub
 ```
 
 Paste that public key at **Settings → Deploy keys → Add deploy key** on
-`github.com/AbdelkbirNA/africa-resq`. Leave *Allow write access* unchecked. Then tell
+`github.com/nour000304/AFRICA-RESQ`. Leave *Allow write access* unchecked. Then tell
 SSH to use it:
 
 ```bash
@@ -42,7 +42,7 @@ ssh -T git@github.com          # expect: "successfully authenticated"
 ## Deploy, the short way
 
 ```bash
-git clone git@github.com:AbdelkbirNA/africa-resq.git /opt/africa-resq
+git clone git@github.com:nour000304/AFRICA-RESQ.git /opt/africa-resq
 cd /opt/africa-resq
 sudo ./scripts/deploy.sh
 ```
@@ -62,7 +62,7 @@ cd /opt/africa-resq && git pull && docker compose up -d --build
 ## Deploy, by hand
 
 ```bash
-git clone git@github.com:AbdelkbirNA/africa-resq.git africa-resq && cd africa-resq
+git clone git@github.com:nour000304/AFRICA-RESQ.git africa-resq && cd africa-resq
 
 cp .env.example .env
 openssl rand -base64 32          # → RESQ_ROVER_TOKEN

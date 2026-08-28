@@ -39,7 +39,7 @@ elif [ -d "$APP_DIR/.git" ]; then
   bold "Updating $APP_DIR…"
   git -C "$APP_DIR" pull --ff-only
 else
-  [ -n "$REPO_URL" ] || die "set RESQ_REPO_URL=git@github.com:AbdelkbirNA/africa-resq.git and re-run"
+  [ -n "$REPO_URL" ] || die "set RESQ_REPO_URL=git@github.com:nour000304/AFRICA-RESQ.git and re-run"
   bold "Cloning into $APP_DIR…"
   git clone "$REPO_URL" "$APP_DIR"
 fi

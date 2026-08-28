@@ -205,7 +205,7 @@ that did not report parses to `null` rather than to zero.
 ## Hosting it
 
 ```bash
-git clone git@github.com:AbdelkbirNA/africa-resq.git /opt/africa-resq
+git clone git@github.com:nour000304/AFRICA-RESQ.git /opt/africa-resq
 cd /opt/africa-resq && sudo ./scripts/deploy.sh
 ```
 
