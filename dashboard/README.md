@@ -256,22 +256,4 @@ tests/      contract fusion risk geometry pathing perception compat mission
 requirements.txt  requirements-perception.txt  requirements-dev.txt
 ```
 
-## What came from where
 
-The command server, the dashboard, the fusion, risk, priority and pathing engines and the
-rover client are this repository's.
-
-Three things arrived from `nour000304/AFRICA-RESQ`, whose history is merged into this one:
-
-- **The shelter dataset** — thirty-eight evacuation points across thirteen Egyptian cities,
-  with capacities, addresses and contacts. Fieldwork by **Rayad** and **Nour Taha**,
-  reproduced record for record in `server/shelters.py`.
-- **The mission record** — SQLite plus append-only JSONL, and the live event feed over it.
-  **Nour Taha**'s data layer, in `server/recorder.py`, rewritten to run inside an async
-  server without stalling the broadcast.
-- **Road routing and the region check** — **Rayad**'s OSRM client, in `server/route.py`,
-  with the network made opt-in so the board still answers with the uplink down.
-
-The four compatibility endpoints (`/api/status`, `/api/detection`, `/api/risk`,
-`/api/full`) are the shape Rayad's backend published for the frontend team, served here as
-a projection of this server's live state — see `server/compat.py`.
