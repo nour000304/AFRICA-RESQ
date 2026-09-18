@@ -162,23 +162,30 @@
   /* ── gauges ──────────────────────────────────────────────────────────── */
 
   var GAUGES = [
-    { key: 'temp_c', name: 'Temp', unit: '°C', limit: '38\u00A0°C limit', dp: 0,
+    { key: 'temp_c', src: 'atmo', name: 'Temp', unit: '°C', limit: '38\u00A0°C limit', dp: 0,
       level: function (v) { return v >= 55 ? 'crit' : v >= 45 ? 'bad' : v >= 38 ? 'warn' : 'ok'; } },
-    { key: 'co_ppm', name: 'CO', unit: 'ppm', limit: '35\u00A0ppm limit', dp: 0,
-      level: function (v) { return v >= 400 ? 'crit' : v >= 200 ? 'bad' : v >= 35 ? 'warn' : 'ok'; } },
-    { key: 'lel_pct', name: 'Gas', unit: '% LEL', limit: 'evac at 10%\u00A0LEL', dp: 0,
+    { key: 'lel_pct', src: 'atmo', name: 'Gas', unit: '% LEL', limit: 'evac at 10%\u00A0LEL', dp: 0,
       level: function (v) { return v >= 25 ? 'crit' : v >= 10 ? 'bad' : v >= 5 ? 'warn' : 'ok'; } },
-    { key: 'o2_pct', name: 'Oxygen', unit: '%', limit: '19.5–23.5%', dp: 1,
-      level: function (v) { return v < 18 || v > 24 ? 'crit' : (v < 19.5 || v > 23.5) ? 'bad' : v < 20.4 ? 'warn' : 'ok'; } },
-    { key: 'pm25_ugm3', name: 'Smoke', unit: 'µg/m³', limit: '150\u00A0µg/m³', dp: 0,
-      level: function (v) { return v >= 500 ? 'crit' : v >= 250 ? 'bad' : v >= 150 ? 'warn' : 'ok'; } }
+    { key: 'pm25_ugm3', src: 'atmo', name: 'Dust', unit: 'µg/m³', limit: '150\u00A0µg/m³', dp: 0,
+      level: function (v) { return v >= 500 ? 'crit' : v >= 250 ? 'bad' : v >= 150 ? 'warn' : 'ok'; } },
+    { key: 'front_m', src: 'ranges', name: 'Ultrasonic', unit: 'm', limit: 'front range', dp: 2,
+      level: function (v) { return v !== null && v !== undefined && v < 1.0 ? 'warn' : 'ok'; } }
   ];
 
-  function paintGauges(atmo) {
+  function gaugeValue(state, g) {
+    if (g.src === 'ranges') {
+      var r = state && state.ranges;
+      return (r && r[g.key] !== undefined) ? r[g.key] : null;
+    }
+    var atmo = state && state.atmosphere;
+    return (atmo && atmo[g.key] !== undefined) ? atmo[g.key] : null;
+  }
+
+  function paintGauges(state) {
     var host = $('gauges');
     host.innerHTML = '';
     GAUGES.forEach(function (g) {
-      var v = atmo ? atmo[g.key] : null;
+      var v = gaugeValue(state, g);
       var el = document.createElement('dl');
       el.className = 'gauge';
       el.dataset.level = (v === null || v === undefined) ? 'none' : g.level(v);
@@ -416,10 +423,10 @@
     }
 
     if (changed('gauges', keyOf(GAUGES.map(function (g) {
-      var v = state.atmosphere ? state.atmosphere[g.key] : null;
+      var v = gaugeValue(state, g);
       return v === null || v === undefined ? null : v.toFixed(g.dp);
     })))) {
-      paintGauges(state.atmosphere);
+      paintGauges(state);
     }
 
     var unavailable = (state.atmosphere && state.atmosphere.unavailable) || [];
@@ -441,8 +448,8 @@
       entry.className = 'tag' + (risk.entry_safe ? ' is-on' : ' is-bad');
       panel.dataset.state = risk.band === 'CRITICAL' ? 'critical' : risk.band === 'HIGH' ? 'danger' : 'ok';
       $('atmo-panel').dataset.state =
-        (state.atmosphere && (state.atmosphere.lel_pct >= 10 || state.atmosphere.co_ppm >= 200
-          || state.atmosphere.o2_pct < 19.5)) ? 'danger' : 'ok';
+        (state.atmosphere && (state.atmosphere.lel_pct >= 10 || state.atmosphere.pm25_ugm3 >= 150))
+          ? 'danger' : 'ok';
     } else {
       $('riskScore').textContent = '--';
       $('riskBand').textContent = connected ? 'measuring' : 'standby';

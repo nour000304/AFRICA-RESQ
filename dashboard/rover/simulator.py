@@ -169,9 +169,9 @@ class Scenario:
         atmosphere = {
             "temp_c": round(28.4 + 46.0 * near + 0.4 * math.sin(el / 7.0), 1),
             "humidity_pct": round(42 + 3 * math.sin(el / 11.0), 1),
-            "co_ppm": round(6 + 620.0 * near + 2 * random.random(), 1),
+            "co_ppm": None,               # no CO sensor fitted
             "lel_pct": round(0.4 + 26.0 * near, 1),
-            "o2_pct": round(20.9 - 2.6 * near, 2),
+            "o2_pct": None,               # no oxygen sensor fitted
             "pm25_ugm3": round(16 + 780.0 * near + 4 * random.random(), 1),
         }
 
